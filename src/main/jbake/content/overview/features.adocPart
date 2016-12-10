@@ -1,0 +1,74 @@
+== Features
+
+=== Metric storage
+Hawkular Metrics offers a REST API to store and retrieve metrics. While Hawkular provides some link:../hawkular-clients/[clients libraries], the same API can be used with any tool, framework or language that supports HTTP communication, such as commands line tools like Curl.
+
+Three types of metrics are available:
+
+ * Availability: metric that represent availability: up or down
+ * Counter: numeric value that always goes up; example: the total number of visitors of a web page
+   ** Rates: rate of change can be retrieve for counter rates
+ * Gauge: numeric value that can go up or down; example: the response time on an application
+   ** Aggregate buckets (min/max/average on some intervals) can be obtained for gauges when individual datapoints are not needed
+
+All metrics can have tags for easy filtering and retention time to automatically prune older data.
+
+=== Metrics collection
+Through https://github.com/hawkular/hawkular-metrics/tree/master/clients/ptranslator[ptrans network protocol adapter], Hawkular supports metrics collected through:
+
+ * syslog
+ * graphite
+ * Ganglia
+ * StatsD
+ * collectD
+
+Additionally Heapster natively has a https://github.com/kubernetes/heapster/tree/master/metrics/sinks/hawkular[sink for Hawkular], it allows to collect metrics coming from a Kubernetes environment (container, pods and hosts metrics in general).
+
+=== Alerting
+
+Powerful alerting is a must have in any monitoring system, in general alerting can be used to notify people or to execute operations (restart a machine, autoscale an environment...).
+
+Hawkular Alerts embeds a rule engine but hides the complexity behind a simple REST API.
+
+Multiple kind of conditions can be defined:
+
+ * Threshold:  (X < 10, X >= 20)
+ * Threshold Range: X inside [10,20), X outside [100,200]
+ * Compare two metrics: X < 80% Y
+ * String: X starts with "ABC", X matches "A.*B"
+ * Availability: X is DOWN
+
+When many measurements are made, some measurements may not be relevant and one need to filter noise from real issues. To do so, Hawkular Alerts has various ways for dampening:
+
+ * Strict: N consecutives true conditions are needed before the action is triggered
+ * Relaxed counts: N consecutives true conditions out of M measurements
+ * Strict time: Condition is true for the time T
+ * Relaxed time: N true conditions in the time T
+
+==== Pluggable action mechanism
+
+Hawkular has notification plugins for:
+
+ * EMails notification
+ * Mobile Push notification (through Aerogear UPS)
+ * SMS notification (with Twillio)
+
+But one can extend and add its own plugin which may take actions rather than notify.
+
+=== Metric Data Visualization
+Hawkular Services and Metrics have a Grafana plugin for dashboard-like visualization.
+Additionally, Hawkular provides ready to use Angular directives to stick graphs on any HTML page. One can build a customized report in very little time.
+
+=== Inventory
+To better react to system failures and/or do root cause analysis, a good understanding of the environment is needed.
+Hawkular Inventory provides a graph database designed to store information about how various parts of the architecture are connected together.
+
+A simple REST API allows to record and query how elements are related, it could be deployments in a server, group temperature sensors...
+
+=== Application Performance Management
+
+Hawkular Application Performance Management (APM), formerly known as Hawkular Business Transaction Management (BTM), can be used to instrument JVM based applications, to observe the application invocations (traces) that may be executing across one or more servers (on-premises and/or cloud).
+
+Fragments of the trace instances, captured from different servers, are reported to the APM server where further analysis is performed. In addition to providing statistical information about the trace instances, it is also possible to extract business relevant properties from the executing applications, for later analysis.
+
+More detailed documentation on this capability can be found https://hawkular.gitbooks.io/hawkular-apm-user-guide/content/index.html[here].

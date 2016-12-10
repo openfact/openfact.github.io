@@ -1,0 +1,430 @@
+= Inventory Documentation
+Lukas Krejci
+2016-01-05
+:icons: font
+:jbake-type: page
+:jbake-status: published
+:toc: macro
+:toc-title:
+
+toc::[]
+
+[[Introduction]]
+== Introduction
+
+Inventory is simply a registry of "things" that Hawkular knows about. It
+contains info about your applications, servers, etc. It also keeps track of
+their relationships with each other.
+
+As such inventory is a graph where nodes are the "things" or "resources" you
+monitor and manage in Hawkular and edges are relationships between those
+resources.
+
+[[types-of-entities]]
+== Types of Entities
+
+To help with classification of the resources you want to monitor, inventory
+understands a couple of other types of entities.
+
+[[tenant]]
+=== Tenant
+Tenants are units of data separation. There may be no relationships between
+entities in different tenants.
+
+From the point of view of the REST API user, tenants are invisible, because they
+are directly deduced from the login credentials (+ optionally a persona) passed
+in the request.
+
+[[environment]]
+=== Environment
+Environments correspond to the common deployment policies in the enterprise
+where for example applications are developed in an "development" environment and
+then are promoted to "test", "staging" and finally to "production".
+
+[[resource]]
+=== Resource
+A resource, as already hinted in the <<Introduction>>, is the representation of
+the "thing" in your infrastructure that is being monitored and managed by
+Hawkular.
+
+Most importantly, a resource references metrics that are relevant to it. Notice
+that metrics are standalone entities that can exist even without a resource
+referencing them though and that there is essentially an M to N mapping between
+resources and metrics (meaning that a single metric can be referenced by
+multiple resources).
+
+The idea behind this separation is that metrics represent concrete qualities
+or measurements being collected while resources are essentially only a logical
+concept that may or may not correspond to an actual piece of software deployed
+on some machine.
+
+This is best imagined if you consider the resources as things you yourself can
+compose on your own. For example you might want to create a resource "Health
+Indicators" for which you would pick and choose several metrics collected
+possibly on several machines representing the health of your infrastructure.
+
+To make things slightly more complicated though, metrics CAN also be contained
+within a resource. This is mainly useful for feeds that want to model the fact
+that a metric cannot exist without a resource in question. Such metrics still can
+be incorporated into othe resources but as soon as the containing resource is
+deleted, the resources that incorporate the metric "lose" it.
+
+Resources can have configuration. A configuration is JSON document that the
+feed can take and apply in some manner to the target resource that it is managing.
+
+A resource can also have a connection configuration. This describes to the feed
+how to connect to the managed resource.
+
+The two types of configurations are described by <<data-entity, data entities>>
+with possible IDs `configuration` or `connectionConfiguration` that are contained
+in the resource entities.
+
+[[metric]]
+=== Metric
+Each resource can have a number of metrics associated with it. As an example,
+we can monitor the `response time` on an URL. While the actual data, i.e. the
+individual measurements of the response time, are being stored in
+link:../metrics/index.html[Hawkular Metrics], the definition of the metric is
+held in inventory, too. This is to keep track of what resources are composed of.
+
+Notice though that resources do not have to "own" their metrics. Rather, an m-to-n
+relationship can exist between the two, meaning that a single metric can be
+incorporated into several resources (or none). Please refer to
+<<resource, Resource chapter>> for more detailed discussion of this.
+
+[[resource-type]]
+=== Resource Type
+A resource type provides metadata about resources - i.e. what metrics they
+support what are the operations one can execute on them and with what kind of
+parameters, etc.
+
+Each resource (i.e. thing being monitored and managed by Hawkular) has to have
+a resource type.
+
+As with resources and metrics, resource types can reference metric types which
+define the metadata of the metrics to be referenced by the resources. As with
+resources and metrics, resource types and metric types are separate standalone
+entities with m-to-n relationships.
+
+Resource types can also contain 2 kinds of data entities - either
+`configurationSchema` or `connectionConfigurationSchema`. The former is a JSON
+schema document describing the format of the configuration of the resources of
+this type, while the latter describes the format of the connection configuration
+of the resources. See <<resource, Resource chapter>> for what those are in
+more detail.
+
+[[metric-type]]
+=== Metric Type
+Metric type defines metadata of a metric. Namely it is its unit and data type
+(gauge, counter, ...).
+
+[[operation-type]]
+=== Operation Type
+
+Resource types can define types of operations that can be executed on resources
+of those types. The operation types define the format of the return values
+as well as the format of the parameters accepted.
+
+[[feed]]
+=== Feed
+A feed is a representation of an "agent" that collects monitoring data and
+performs management operations. Feeds also report on the metrics and resources
+(along with their types) it found in the place they are running.
+
+In other words, the feeds are supposed to "own" both their data and metadata.
+Inventory is clever enough to figure out if 2 feeds declare the same metadata
+and consider it the same. On the other hand, the 2 feeds are not required to
+synchronize their data and metadata in any way.
+
+[[data-entity]]
+=== Data Entity
+
+A data entity holds a JSON value. It can be contained in a variety of other
+entities (resource types, resource, operation types) and the ID of the data
+entity defines its "purpose" in the containing entity. E.g. operation types
+can have data entities with ID either `returnType` or `parameterTypes`.
+
+[[metadata-pack]]
+=== Metadata Pack
+A metadata pack is a means of grouping resource types and metric types together
+and ensuring they do not change. If a metadata pack with a certain "identity hash"
+exists, the users can be sure that a set of resource types and metric types with
+the exact configuration schemas, units, operation types, etc. are also defined. As
+such a metadata pack is a means of quickly making sure that other metadata exists
+in a way the user expects.
+
+[[inventory-organization]]
+== Inventory Organization
+
+[[img-inventory-organization]]
+.Inventory Organization
+ifndef::env-github[]
+image::/img/docs/components/inventory/index/inventory-entity-diagram.png[Inventory Organization, align="center"]
+endif::[]
+ifdef::env-github[]
+image::../../../../assets/img/docs/components/inventory/index/inventory-entity-diagram.png[Inventory Organization, align="center"]
+endif::[]
+
+For the textually inclined, here's a description of the above diagram as a tree (frankly, this is now more readable than the above
+automatically generated diagram):
+
+* `<<tenant, Tenant>>`
+** 1 `contains` 0..N `<<environment, Environment>>`, `<<feed, Feed>>`, `<<resource-type, Resource Type>>`, `<<metric-type, Metric Type>>`,
+   `<<metadata-pack, Metadata Pack>>`
+* `<<environment, Environment>>`
+** 1 `contains` 0..N `<<resource, Resource>>`, `<<metric, Metric>>`
++
+Resources and metrics can exist at 2 places. Either directly under an environment, which is where custom user-defined resources and
+metric can live. Resources and metrics can also live under feed entities where they are placed by the connecting feeds when they
+report the data they have discovered.
+** 0..1 `incorporates` 0..N `<<feed, Feed>>`
++
+Environment can express that it is composed of a number of feeds. A feed on the other hand can only be incorporated in at most 1
+environment at a time.
+* `<<feed, Feed>>`
+** 1 `contains` 0..N `<<resource-type, Resource Type>>`, `<<metric-type, Metric Type>>`, `<<resource, Resource>>`, `<<metric, Metric>>`
++
+Feeds represent the "things" that report data and metadata. Feeds can be associated with (at most 1 at a time) environment but they 
+don't have to. To move a feed from one environment to another, simply remove the "incorporates" association with the first enviroment
+and create a new one with another environment.
+* `<<resource-type, Resource Type>>`
+** 1 `contains` 0..2 `<<data-entity, Data Entity>>`
++
+A resource type can contain a data entity with ID `configurationSchema` defining a JSON schema for `configuration` of resources that
+are defined by this resource type or `connectionConfigurationSchema` which is a JSON schema for `connectionConfiguration` of the
+resources (which defines how the feed connects to the resource in question, whatever that may mean for a given resource and feed).
+** 1 `contains` 0..N `<<operation-type, Operation Type>>`
++
+Resource types define the types of operations that should be executable on the resources of the type.
+** 1 `defines` 0..N `<<resource, Resource>>`
++
+A resource type defines resources. This means that the users can reasonably assume that the data on the resource correspond to the
+metadata defined at the resource type (i.e. that the configurations on the resource correspond to the schemas defined at the resource
+type and that the resource incorporates the metrics with the metric types that are incorporated by the resource type.
++
+NOTE: A resource MUST be defined by exactly 1 resource type. It is not possible to "re-declare" a resource type of a resource.
++
+NOTE: Conformance of the resource data to the schemas is currently not enforced, so it's only informational.
+** 1 `incorporates` 0..N `<<metric-type, Metric Type>>`
++
+By incorporating a metric type, the resource type declares that the users can expect the resources of this type to incorporate metrics
+of the metric type.
++
+NOTE: This is currently not enforced, so its only informational.
+* `<<metric-type, Metric Type>>`
+** 1 `defines` 0..N `<<metric, Metric>>`
++
+Similarly to how a resource must have a resource type, each metric must have a single metric type. The metric type defines the unit
+of the metric as well as default collection interval and other metadata about the metric.
+* `<<operation-type, Operation Type>>`
+** 1 `contains` 0..2 `<<data-entity, Data Entity>>`
++
+Similarly to how resource type defines the `configurationSchema` and `connectionConfigurationSchema`, the operation type defines 2
+schemas for a return type (the data entity has ID `returnType`) and parameter types (the data entity has ID `parameterTypes`).
+* `<<resource, Resource>>`
+** 0..1 `contains` 0..N `<<resource, Resource>>`
++
+A resource can contain other resources. This is a "existential" relationship meaning that if a parent resource is deleted, so are
+its child resources.
+** 0..M `isParentOf` 0..N `<<resource, Resource>>`
++
+In addition to defining the resource hierarchy using the existential containment of resources in each other, there can exist other
+more free form hierarchies realized using the `isParentOf` relationship (each contained resource is also "parented" using this 
+relationship automagically). This enables the users to create "alternative hierarchies" across feeds or environments, etc.
++
+As opposed to `contains` relationship which forms a strict tree in the Inventory, `isParentOf` is allowed to create "diamonds", i.e. 1
+resource is allowed to have 2 or more parents. It is not allowed to form loops using the `isParentOf` relationship though.
+** 0..M `incorporates` 0..N `<<metric, Metric>>`
++
+A resource can be associated with metrics. This essentially means that there exists a "causal" relationship between the existence
+of the resource and the metric. I.e. the metric is emmitted because it "tells something about" the resource or the resource
+logically represents some quality monitored by a metric, etc.
+** 0..1 `contains` 0..N `<<metric, Metric>>`
++
+In addition to incorporating a metric to a resource, a resource can also outright contain a metric. As explained in the resource 
+description in the previous chapter, this can be used by the feeds to declare that a metric cannot exist without a resource. I.e.
+this is a stronger form of the `incorporates` between a resource and a metric. Each contained resource is automatically incorporated
+by the resource, too.
+* `<<metadata-pack, Metadata Pack>>`
++
+Metadata packs group and "freeze" metadata so that users can be sure they exists in a state they expect.
+Metadata packs can associate *GLOBAL* resource types and metric types only. By incorporating a resource/metric type in a metadata pack
+it essentially becomes read-only. A membership in a metadata pack ensures that the resource type cannot be modified or deleted.
+This can be used to ensure the users that a certain resource/metric type is present in the inventory.
+
+[[basic-principles]]
+=== Basic Principles
+
+Data is Pushed::
+All data, including identifiers of the entities, is generated in the clients
+of inventory.
++
+This means that, generally speaking, an entity cannot be uniquely identified by
+its, client-generated, ID. To uniquely identify an entity, one has to use its
+canonical path.
+
+Canonical Paths::
+A canonical path follows the `contains` relationships from a tenant down to the
+entity in question.
++
+The canonical path has a form illustrated by the following example:
++
+====
+**/t;**__tenant-id__**/e;**__env-id__**/r;**__resource-id__
+====
++
+The above example is a canonical path to a resource with ID `resource-id` which
+is located in environment `env-id` which is inside a tenant `tenant-id`.
++
+The type specifiers in the individual path segments can be these:
+
+  * *t* - tenant
+  * *e* - environment
+  * *rt* - resource type
+  * *mt* - metric type
+  * *f* - feed
+  * *r* - resource
+  * *m* - metric
+  * *ot* - operation type
+  * *d* - data entity
+  * *mp* - metadata pack
+    
+[[identity-hashing]]
+== Identity Hashing
+
+Inventory is able to establish "identity hashes" of several types of entities (namely resource, metric, resource type, 
+metric type, operation type, data entity and feed) to enable automatic "linking" of identical entities across the 
+tenant. This enables the inventory to tell that 2 resource types in 2 feeds are identical or that 2 feeds report
+the same resources.
+
+Generically, an identity hash is a Merkle tree-hash composed of the ID of the entity (i.e. NOT its canonical path but only its
+ID) and the hashes of its child entities (as established by the `contains` relationship). In addition, data entities
+include their ID and the contents of their JSON data in their identity hash.
+
+Note that because of the inclusion of the entity's ID in the hash an identity hash is more restrictive
+than a "content hash". A content hash would be able to tell if 2 otherwise different resources have the same configurations
+but an identity hash will tell that the 2 resources have the same ID and the configurations. This is based on 
+an assumption that like resources should be likely detected and therefore should have the same ID.
+
+[[configuration]]
+== Configuration
+Inventory is configurable using several means.
+
+* There are built-in defaults.
+* Configuration can be read from a configuration file
+* Several configuration properties can be overriden using java system properties and environment variables.
+
+Inventory uses a single configuration file even though several different and
+independent subsystems are configured using it.
+
+First it can be used to override the choice of inventory implementation in case
+there are more of them on the classpath.
+
+Second,
+[[locating-config-file]]
+=== Locating Configuration File
+
+. If there is a system property called `hawkular-inventory.conf` the value is
+supposed to be a path to file from which the configuration will be loaded.
+
+. If such system property is not defined, the system checks for existence of a
+file called `.hawkular-inventory.conf` in the home directory of the user running
+the server.
+
+. If no such file exists, the default configuration is used.
+
+[[configuration-properties]]
+=== Configuration Properties
+
+++++
+<div class="wider-table-container">
+++++
+
+.Available Configuration Properties
+[options="header",cols=5]
+|====
+|Property Name|Availability|Environment Variable|Default Value|Description
+
+e|This is the property to be used in the configuration file. Also this is the
+name of the system property to override the configured value with (if not
+specified otherwise)
+e|Some properties are only available for certain components inside inventory
+that might or might not be present during the runtime
+e|This is the name of the environment variable to override the value
+|
+|
+
+|`hawkular.inventory.impl`
+|_always_
+|`HAWKULAR_INVENTORY_IMPL`
+|_undefined_
+|The fully qualified class name of the `org.hawkular.inventory.api.Inventory`
+interface implementation that is accessible on the runtime classpath.
+
+If this property is not present, the first implementation available using Java
+service loading mechanism is used.
+
+|`hawkular.inventory.transaction.retries`
+|Inventory implementation inheriting from
+`org.hawkular.inventory.base.BaseInventory` (this is true by default)
+|`HAWKULAR_INVENTORY_TRANSACTION_RETRIES`
+|5
+|The base implementation assumes that the backend storage uses some kind of
+optimistic locking for transaction handling. This property defines the number of
+retries of transactions if they fail due to locking or concurrent access
+situations.
+
+|`hawkular.inventory.tinkerpop.graph-provider-impl`
+|Inventory implementation based on Tinkerpop3 API (the default)
+|`HAWKULAR_INVENTORY_TINKERPOP_GRAPH_PROVIDER_IMPL`
+|_undefined_
+|The fully qualified class name of an implementation of the
+`org.hawkular.inventory.impl.tinkerpop.spi.GraphProvider` interface.
+
+Tinkerpop is an API that is implemented by multiple graph databases. This
+property can be used to override the default selection mechanism that is to use
+the first implementation loaded using the Java services mechanism. Hawkular is
+by default packaged with https://github.com/pietermartin/sqlg[Sqlg].
+
+|`sql.jdbc.url` (system property `hawkular.inventory.sql.jdbc.url`)
+|The connection string to the database to store inventory data to.
+|`HAWKULAR_INVENTORY_SQL_JDBC_URL`
+|_undefined_
+|The connection string to the database that will be used to store inventory data to.
+
+If the connection string starts with `jndi:`, the remainder of the connection string is understood to be the object
+name of a datasource accessible in the JNDI tree of the Hawkular server (e.g. the default
+`jndi:java:/jboss/datasources/HawkularInventoryDS_hsqldb`). Otherwise this can be a connection string to any database
+supported by Sqlg. As of the time of writing, this is Postgresql, H2 and HSQLDB (e.g.
+`jdbc:postgresql://localhost/hawkular`). In the case of a "normal" JDBC connection, it will usually be necessary to
+also provide the username and password. If the connection is obtained from JNDI there is no need to provide the
+credentials.
+
+|`sql.jdbc.username` (system property `hawkular.inventory.sql.jdbc.username`)
+|The user name to use when connecting using a normal JDBC connection.
+|`HAWKULAR_INVENTORY_SQL_JDBC_USERNAME`
+|_undefined_
+|The user name to use when connecting using a normal JDBC connection.
+
+|`sql.jdbc.password` (system property `hawkular.inventory.sql.jdbc.password`)
+|The password to use when connecting using a normal JDBC connection.
+|`HAWKULAR_INVENTORY_SQL_JDBC_PASSWORD`
+|_undefined_
+|The password to use when connecting using a normal JDBC connection.
+
+|`hawkular.allowed-cors-origins`
+|Comma separated list of addresses (including schema) allowed to interact with the inventory REST API from the browser.
+|`ALLOWED_CORS_ORIGINS`
+|`*`
+|This configuration is shared with Hawkular Metrics and Hawkular Alerts and sets up the addresses allowed to
+interact with the inventory from the browser in cross-origin manner. By default any address is allowed.
+
+|`hawkular.allowed-cors-access-control-allow-headers`
+|Comma separated additional headers allowed to be passed in CORS requests from browser
+|`ALLOWED_CORS_ACCESS_CONTROL_ALLOW_HEADERS`
+|_undefined_
+|Again, this is shared with Hawkular Metrics and Hawkular Alerts and specifies additional headers (apart from the default
+ones required for inventory to function properly) that can be passed to Hawkular Inventory in CORS requests. This is
+an advanced configuration that you usually don't have alter.
+
+|====

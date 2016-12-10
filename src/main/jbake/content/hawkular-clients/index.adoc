@@ -1,0 +1,123 @@
+= Clients
+Thomas Heute
+2016-07-07
+:icons: font
+:description: Hawkular clients
+:jbake-type: page
+:jbake-status: published
+
+= Client applications/plugins
+
+[cols="6*", options="header"]
+|===
+|Project
+|Description
+|Documentation
+|Project Link
+|Download
+|Compatibility
+
+|*ManageIQ*
+|Management Application, also used to manage Middleware Servers
+|link:manageiq/docs/quickstart-guide/[Quickstart guide]
+|link:http://manageiq.org[ManageIQ Website]
+|link:http://manageiq.org/download/[Downloads]
+|Hawkular Services > 0.0.4
+
+
+|*Grafana plugin*
+|Plugin to display metrics in Grafana
+|link:grafana/docs/quickstart-guide/[Quickstart guide]
+|link:https://github.com/hawkular/hawkular-grafana-datasource[GitHub repository]
+|
+| Hawkular Services
+Hawkular Metrics
+
+|*WildFly agent*
+|Agent to embed within a WildFly server which feeds Hawkular Services with metrics, inventory and allows to execute operations
+|
+|link:https://github.com/hawkular/hawkular-agent[GitHub repository]
+|
+| Hawkular Services
+Hawkular Metrics
+
+|*Heapster*
+|Heapster sink to store container clusters metrics inside Hawkular
+|
+|link:https://github.com/kubernetes/heapster[GitHub repository]
+|
+|Hawkular Metrics
+
+|===
+
+= Client libraries
+
+
+[cols="6*", options="header"]
+|===
+|Language
+|Documentation
+|Project Link
+|Download
+|Compatibility
+|Comment
+
+|*Go*
+|link:https://github.com/hawkular/hawkular-client-go/blob/master/README.adoc[README]
+|link:https://github.com/hawkular/hawkular-client-go[GitHub repository]
+|
+|Metrics API
+|
+
+|*Ruby*
+|link:https://github.com/hawkular/hawkular-client-ruby/blob/master/README.rdoc[README] / link:./ruby-client-yardoc.html[yardoc]
+|link:https://github.com/hawkular/hawkular-client-ruby[GitHub repository]
+|
+|Metrics API,
+Inventory API
+|
+
+|*Python*
+|link:https://github.com/hawkular/hawkular-client-python/blob/master/README.md[README]
+|link:https://github.com/hawkular/hawkular-client-python[GitHub repository]
+|
+|Metrics API
+|
+
+|*Java*
+|link:https://github.com/hawkular/hawkular-client-java/blob/master/README.md[README]
+|link:https://github.com/hawkular/hawkular-client-java[GitHub repository]
+|
+|Metrics API,
+Alerts API,
+Inventory API
+| Outdated, need icon:heart-o[]
+
+|===
+
+= Protocol translation
+Some solutions are able to emit/push metrics to external parties, for some of them Hawkular can listen to those solutions and push metrics into Hawkular, it means that if a metric is exposed
+in one of the supported solution, it would be added to Hawkular by installing the corresponding protocol translator (At this time, one "agent" supports the whole list).
+
+[cols="2*", options="header"]
+|===
+|"Protocol"
+|Project Link
+ 
+|*collectd*
+|link:https://github.com/hawkular/hawkular-metrics/tree/master/clients/ptranslator[GitHub repository]
+
+|*Ganglia*
+|link:https://github.com/hawkular/hawkular-metrics/tree/master/clients/ptranslator[GitHub repository]
+
+|*Graphite*
+|link:https://github.com/hawkular/hawkular-metrics/tree/master/clients/ptranslator[GitHub repository]
+
+|*Statsd*
+|link:https://github.com/hawkular/hawkular-metrics/tree/master/clients/ptranslator[GitHub repository]
+
+|*Syslog*
+|link:https://github.com/hawkular/hawkular-metrics/tree/master/clients/ptranslator[GitHub repository]
+
+|===
+

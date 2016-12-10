@@ -1,0 +1,372 @@
+= Hawkular Accounts for developers
+Juraci Paixão Kröhling
+2015-04-22
+:description: Consuming Hawkular Accounts
+:icons: font
+:jbake-type: page
+:jbake-status: published
+:toc: macro
+:toc-title:
+
+toc::[]
+
+== Introduction
+
+Hawkular Accounts is the Hawkular component that deals with authentication and authorization and is meant to be
+consumed by other Hawkular components, such as Metrics, Inventory, Alerts and so on.
+
+There are two main facets for Hawkular Accounts:
+
+* Inner engine, which handles the integration with Keycloak, the permission framework, authorization-related data
+storage user interface for logging in, persona switcher, organization management and so on.
+* API and helpers for other components, such as CDI providers for authorization and authentication services,
+http://hawt.io[hawt.io]
+integration, AngularJS events and so on.
+
+== Terms and concepts
+
+See the link:development.html[list of Terms] page.
+
+== Quick start
+
+Hawkular Accounts handles all the login, logout and authentication for Hawkular, both in the front end and in backend,
+in a mostly seamless way.
+
+=== Backend
+
+In your backend, you'll need to add the dependency to the Account's API:
+
+`pom.xml`:
+[source,xml]
+----
+<dependency>
+  <groupId>org.hawkular.accounts</groupId>
+  <artifactId>hawkular-accounts-api</artifactId>
+  <version>2.0.2.Final</version> <!-- Refer to the Accounts project for the most recent version -->
+</dependency>
+----
+
+If you are using a standalone backend instead of Kettle, you'll need to deploy the Hawkular Accounts backend and
+install the Keycloak adapters and modules. To do that, please refer to the Keycloak's documentation. You can refer to
+the `distribution` module in the Account's source code for an example on how to accomplish that.
+
+For Kettle, the following needs to be added to the `standalone.xsl`:
+
+`standalone.xsl`:
+[source,xml]
+----
+<secure-deployment name="hawkular-accounts.war">
+    <realm>hawkular</realm>
+    <resource>hawkular-accounts-backend</resource>
+    <use-resource-role-mappings>true</use-resource-role-mappings>
+    <enable-cors>true</enable-cors>
+    <enable-basic-auth>true</enable-basic-auth>
+    <credential name="secret"><xsl:value-of select="$uuid.hawkular.accounts.backend" /></credential>
+</secure-deployment>
+----
+
+You can refer to the http://docs.jboss.org/keycloak/docs/1.2.0.Beta1/userguide/html_single/index.html[Keycloak documentation]
+for details on what each option does.
+
+Apart from that, you'll need also to change your `web.xml` to activate the authentication via Keycloak.
+
+[source,xml]
+----
+<security-constraint>
+  <web-resource-collection>
+    <web-resource-name>REST endpoints</web-resource-name>
+    <url-pattern>/*</url-pattern>
+  </web-resource-collection>
+
+  <auth-constraint>
+    <role-name>*</role-name>
+  </auth-constraint>
+</security-constraint>
+
+<login-config>
+  <auth-method>KEYCLOAK</auth-method>
+  <realm-name>hawkular</realm-name>
+</login-config>
+
+<security-role>
+  <role-name>user</role-name>
+</security-role>
+<security-role>
+  <role-name>admin</role-name>
+</security-role>
+----
+
+Optionally, and recommended, is the inclusion of a `jboss-web.xml` and `jboss-ejb3.xml` to your project, with the
+following content:
+
+`jboss-web.xml`:
+[source,xml]
+----
+<jboss-web xmlns="http://www.jboss.com/xml/ns/javaee" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.jboss.com/xml/ns/javaee http://www.jboss.org/j2ee/schema/jboss-web_5_1.xsd">
+  <security-domain>keycloak</security-domain>
+</jboss-web>
+----
+
+`jboss-ejb3.xml`:
+[source,xml]
+----
+<jboss:jboss
+    xmlns="http://java.sun.com/xml/ns/javaee"
+    xmlns:jboss="http://www.jboss.com/xml/ns/javaee"
+    xmlns:s="urn:security:1.1"
+    version="3.1" impl-version="2.0">
+
+  <assembly-descriptor>
+    <s:security>
+      <ejb-name>*</ejb-name>
+      <s:security-domain>keycloak</s:security-domain>
+    </s:security>
+  </assembly-descriptor>
+</jboss:jboss>
+----
+
+Currently, it's not possible to fully take advantage of Keycloak's JAAS provider due to our multi tenancy setup. So, the
+secured components should add a `@PermitAll` annotation, to bypass JAAS' permission checking.
+
+After those steps, your backend will start requiring the requests to be authenticated. Requests coming from the UI
+will include a token that is used by the Keycloak Wildfly Adapter and verified by contacting a Keycloak Server.
+
+After this is setup, you can inject Hawkular Accounts services directly into your managed beans. You can check the
+`samples` module from the Hawkular Accounts project. The source below is taken from there, and shows how a REST
+endpoint might consume Hawkular Accounts main services.
+
+[source,java]
+----
+@Path("/samples")
+@PermitAll // we bypass JAAS' protections, as we want to perform the checks inside the methods
+@Stateless
+public class SampleEndpoint {
+
+    @Inject @HawkularAccountsSample
+    EntityManager em;
+
+    @Inject
+    Instance<Persona> currentPersonaInstance;
+
+    /**
+     * A managed instance of the {@link PermissionChecker}, ready to be used.
+     */
+    @Inject
+    PermissionChecker permissionChecker;
+
+    /**
+     * We need the {@link ResourceService} as we need to tell Hawkular Accounts about who created "what". A resource
+     * is this "what".
+     */
+    @Inject
+    ResourceService resourceService;
+
+    /**
+     * For this example, we have four operations. We get an instance of each of them injected and qualified by its name.
+     */
+    @Inject
+    @NamedOperation("sample-create")
+    Operation operationCreate;
+
+    @Inject
+    @NamedOperation("sample-read")
+    Operation operationRead;
+
+    @Inject
+    @NamedOperation("sample-update")
+    Operation operationUpdate;
+
+    @Inject
+    @NamedOperation("sample-delete")
+    Operation operationDelete;
+
+    @GET
+    public Response getAllSamples() {
+        Persona currentPersona = currentPersonaInstance.get();
+        CriteriaBuilder builder = em.getCriteriaBuilder();
+        CriteriaQuery<Sample> query = builder.createQuery(Sample.class);
+        Root<Sample> root = query.from(Sample.class);
+        query.select(root);
+        query.where(builder.equal(root.get(Sample_.ownerId), currentPersona.getId()));
+
+        return Response.ok().entity(em.createQuery(query).getResultList()).build();
+    }
+
+    @GET
+    @Path("{sampleId}")
+    public Response getSample(@PathParam("sampleId") String sampleId) {
+        Sample sample = em.find(Sample.class, sampleId);
+
+        // before returning, we check if the current persona has permissions to access this.
+        if (permissionChecker.isAllowedTo(operationRead, sample.getId())) {
+            return Response.ok().entity(sample).build();
+        }
+
+        // the current persona is not allowed, so, return a 404.
+        return Response.status(Response.Status.NOT_FOUND).build();
+    }
+
+    @POST
+    public Response createSample(SampleRequest request) {
+        Persona currentPersona = currentPersonaInstance.get();
+        // for this example, we allow everybody to create a sample, but there might be situations where an user can
+        // only create resources if they are allowed access to some other resource.
+        Sample sample = new Sample(UUID.randomUUID().toString(), currentPersona.getId());
+        resourceService.create(sample.getId(), currentPersona);
+        sample.setName(request.getName());
+
+        em.persist(sample);
+        return Response.ok().entity(sample).build();
+    }
+
+    @DELETE
+    @Path("{sampleId}")
+    public Response removeSample(@PathParam("sampleId") String sampleId) {
+        Sample sample = em.find(Sample.class, sampleId);
+        Resource resource = resourceService.get(sampleId);
+
+        // check if the current user can perform this operation
+        if (permissionChecker.isAllowedTo(operationDelete, resource)) {
+            em.remove(sample);
+            return Response.noContent().build();
+        }
+        return Response.status(Response.Status.NOT_FOUND).build();
+    }
+}
+----
+
+=== Frontend
+
+The frontend is done in a seamless way and other components don't need to know about the existence of Hawkular
+Accounts at all. When the application is loaded, the Hawkular Accounts frontend plugin interacts with hawt.io's OAuth
+plugin, which in turn interacts with Keycloak's JavaScript adapter.
+
+Hawt.io's OAuth plugin adds the authentication token (formally: "bearer token") to the requests going to the backend
+via an AngularJS interceptor, so, your frontend plugin doesn't need to do anything.
+
+Hawkular Accounts handles the context switcher for personas, and you might want to register listeners for a couple of
+events that are emitted from it: `CurrentPersonaLoaded` and `SwitchedPersona`. As their names suggest, those events
+are emitted as soon as Hawkular Accounts detects which persona is the current one (`CurrentPersonaLoaded`) and as
+soon as the user has changed the current persona using the "Persona Switcher" (`SwitchedPersona`).
+
+image::/img/dev-docs/persona-switcher.png[Persona Switcher at the UI]
+
+== CLI access
+
+Requests coming from the CLI need to pass the authentication data for an user via CLI,
+which can be done via basic auth for a _context_ (metrics, alerts, ..) and _endpoint_ :
+
+[source,bash]
+----
+curl -v http://user:pass@localhost:8080/context/endpoint
+----
+
+To retrieve a list of tenants you would run:
+[source,bash]
+----
+curl -v http://user:pass@localhost:8080/hawkular/inventory/tenant
+----
+
+If this user is impersonating an organization, the organization's ID should be passed via the `Hawkular-Persona`
+HTTP header:
+
+[source,bash]
+----
+curl -v -H 'Hawkular-Persona: uuid' http://user:pass@localhost:8080/context/endpoint
+----
+
+A list of possible personas for a given user can be obtained via:
+[source,bash]
+----
+curl -v http://user:pass@localhost:8080/hawkular/accounts/personas
+----
+
+== Events
+
+Hawkular Accounts publishes a series of events, both in the frontend and in the backend. Interested parties would
+need only to register for those events accordingly.
+
+=== Frontend events
+
+On the Hawkular Console, the Accounts plugin publishes the following AngularJS events:
+
+* `CurrentPersonaLoaded` : called once a persona is loaded. For instance, when the user has logged in and Accounts
+have recognized the persona, or when the user has switched from the main persona into an organization. The persona is
+ passed along with the event.
+* `SwitchedPersona` : called only when the user has switched personas. Example: from the main account to an
+organization or vice-versa. The new persona is passed along with the event.
+* `OrganizationCreated` : called when the user has created an organization. No object is passed along with the event.
+* `OrganizationRemoved` : called when the user has removed an organization. No object is passed along with the event.
+
+=== Backend events
+
+For modules or components that are deployed as a web application on Hawkular, the Keycloak events are made available
+via Accounts and can be consumed as both CDI events or JMS messages. Note that one should *not* register for both CDI
+events and JMS messages, as it would cause a duplicate processing of the event.
+
+Almost all events from Keycloak are made available for Hawkular components, except:
+
+* REFRESH_TOKEN
+* CODE_TO_TOKEN
+* LOGIN
+
+If your component need to be informed when one of those are triggered, refer to the `keycloak-server.json` on the
+Hawkular distribution and change the entry `eventsListener` accordingly.
+
+==== Consuming events via CDI
+
+Events are published primarily via JMS. To consume it via CDI, add a dependency on the module
+`org.hawkular.accounts:hawkular-accounts-event-listener` and register a managed bean that has a method observing the
+ event `org.hawkular.accounts.events.listener.AccountsEvent`:
+
+[source,java]
+----
+@ApplicationScoped
+public class AccountsEventListener {
+    private final MsgLogger logger = MsgLogger.LOGGER;
+
+    public void accountsEvent(@Observes AccountsEvent event) {
+        logger.cdiEventReceived(event.getAction(), event.getEventId(), event.getPersona().getId());
+    }
+
+}
+----
+
+==== Consuming events via JMS
+
+If you prefer to consume directly via JMS, you can listen the destination `topic/HawkularAccountsEvents`. On a MDB,
+the configuration would look like the following:
+
+[source,java]
+----
+@MessageDriven(activationConfig = {
+        @ActivationConfigProperty(
+                propertyName = "destinationLookup",
+                propertyValue = "topic/HawkularAccountsEvents"
+        ),
+
+        @ActivationConfigProperty(
+                propertyName = "destination",
+                propertyValue = "HawkularAccountsEvents"
+        ),
+
+        @ActivationConfigProperty(
+                propertyName = "destinationType",
+                propertyValue = "javax.jms.Topic"
+        ),
+
+        @ActivationConfigProperty(
+                propertyName = "connectionFactoryJndiName",
+                propertyValue = "java:/HawkularBusConnectionFactory"
+        )
+})
+@PermitAll
+public class AccountsMessageListener implements MessageListener {
+    private final MsgLogger logger = MsgLogger.LOGGER;
+
+    @Override
+    public void onMessage(Message message) {
+        logger.eventReceived();
+    }
+}
+----

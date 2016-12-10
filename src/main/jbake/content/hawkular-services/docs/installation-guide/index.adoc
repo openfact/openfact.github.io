@@ -1,0 +1,82 @@
+= Installation Guide
+Thomas Heute
+2015-09-08
+:description: Installing Hawkular
+:jbake-type: page
+:jbake-status: published
+:icons: font
+:toc: macro
+:toc-title:
+
+toc::[]
+
+== Basic installation of Hawkular Server
+
+There are two main components to install Hawkular server, the server itself and Cassandra.
+Fortunately both are easy to install.
+
+NOTE: Please do *not* use the `root` user for installation; create and use a non-root user.
+
+=== Apache Cassandra
+You need a running Cassandra cluster to get started, they are various ways to install it,
+any would do and you only need to know the IP/Hostname and port of your Cassandra server.
+
+Developers of Hawkular Services all have their own preference depending on the operating
+system they use and experience, here is one option, using ccm:
+
+. First link:https://github.com/pcmanus/ccm[install ccm]
+. Create a cluster (of one for now) of Cassandra 3.7 for Hawkular, (with start_rpc enabled) and start it:
+
+.ccm commands
+----
+ccm create hawkular -v 3.7 -n 1
+ccm updateconf "start_rpc: true"
+ccm start
+----
+
+Now Cassandra should be running on your machine on the default port.
+
+=== Hawkular Services
+. Grab the https://github.com/hawkular/hawkular-services/releases/latest[latest distribution of Hawkular Services],
+the file name should look like: hawkular-services-dist-x.y.z.Final.zip (or .tar.gz)
+. Unzip the package in the directory of your choice, we'll call it `$HS_HOME`
+. Create as many users as you need (replace `myUsername` and `myPassword` by the values of your choice):
+
+ sh $HS_HOME/bin/add-user.sh -a -u myUsername -p myPassword -g read-write,read-only
+
+. Hawkular Services is ready to start assuming Cassandra is running on the same machine, on the same port.
+
+NOTE: If Cassandra in running on a different machine, on non standard port or if you have a cluster of Cassandra nodes,
+you may need to do `export CASSANDRA_NODES="cassandra_host1,cassandra_host2,..."` prior to start Hawkular Services.
+The `CASSANDRA_NODES` environment variable should be a comma-delimited list
+of Cassandra node endpoint addresses. The value for each address should match the
+value of the `rpc_address` in the `cassandra.yaml` configuration file. You do not
+actually have to specify the address of every Cassandra node. As long as Hawkular
+is able to connect to one node, it will discover all of the other cluster nodes.
+
+.. To just start Hawkular Services:
+
+`sh $HS_HOME/bin/standalone.sh`
+
+..  To start Hawkular Services with the embedded WildFly agent (this is used to monitor itself since
+Hawkular Services is based on WildFly and the embedded agent can push metrics and inventory to Hawkular
+Services). Replace `myUsername` and `myPassword`, with a userame/password combination as defined in the step 3.
+
+`sh $HS_HOME/bin/standalone.sh -Dhawkular.rest.user=myUsername -Dhawkular.rest.password=myPassword -Dhawkular.agent.enabled=true`
+
+. Hawkular Services should be starting, and soon you should be able to access: http://localhost:8080
+to get confirmation that all the services are running
+
+[[img-main]]
+.Hawkular Services Status page
+ifndef::env-github[]
+image::/img/hawkular-services/statuspage.png[Status page]
+endif::[]
+ifdef::env-github[]
+image::../../../../assets/img/hawkular-services/statuspage.png[Status page]
+endif::[]
+
+
+== Using SSL / HTTPS
+
+If you want to enable secure communications between browsers, Hawkular servers, and agents/feeds, see link:secure-comm.html[Secure Communications].
